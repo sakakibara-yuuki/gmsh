@@ -1,1 +1,2 @@
 *.un~
+src/fem/version.py
