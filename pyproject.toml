@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fem"
+authors = [
+    {name = "sakakibara yuuki", email = "sakakilabo0000@gmail.com"},
+]
+description = "This is my dream"
+readme = "README.md"
+requires-python = ">=3.7"
+# package-dir = {"": "src"}
+classifiers = [
+    "Framework :: Gmesh",
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "setuptools-scm",
+    "numpy",
+    "gmsh",
+    "pygmsh"
+]
+dynamic = ["version"]
+
+[tool.setuptools_scm]
+write_to = 'src/fem/version.py'
+
+
+[tool.setuptools.dynamic]
+version = {attr = 'fem.version.__version__'}
