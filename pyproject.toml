@@ -10,7 +10,6 @@ authors = [
 description = "This is my dream"
 readme = "README.md"
 requires-python = ">=3.7"
-# package-dir = {"": "src"}
 classifiers = [
     "Framework :: Gmesh",
     "Programming Language :: Python :: 3",
