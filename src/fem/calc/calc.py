@@ -26,9 +26,34 @@ def get_edge_node_num(elements):
     return edge_num, node_num
 
 
-def calc_K(elements):
+def calc_C(elements, edge_num, node_num):
 
-    edge_num, node_num = get_edge_node_num(elements)
+    C = np.zeros((edge_num + node_num, edge_num + node_num))
+
+    for e in elements:
+
+        for edge_i, edge_j in itertools.product(e.edges, e.edges):
+            i = int(edge_i.tag - 1)
+            j = int(edge_j.tag - 1)
+            C[i][j] += np.dot(edge_i.N, edge_j.N)
+
+        for edge in e.edges:
+            i = int(edge.tag - 1)
+            for node in edge.nodes:
+                j = int(edge_num + node.tag - 1)
+                C[i][j] += np.dot(edge.N, node.grad)
+                C[j][i] = C[i][j]
+
+        for edge in e.edges:
+            for node_i, node_j in itertools.product(edge.nodes, edge.nodes):
+                i = int(edge_num + node.tag - 1)
+                j = int(edge_num + node.tag - 1)
+                C[i][j] = np.dot(node_i.grad, node_j.grad)
+
+    return C
+
+
+def calc_K(elements, edge_num, node_num):
 
     determinants = 1
     K = np.zeros((edge_num + node_num, edge_num + node_num))
@@ -39,9 +64,14 @@ def calc_K(elements):
             K[i][j] += np.dot(edge_i.rot, edge_j.rot) * determinants
     return K
 
+def pprint(A):
+    for a in A:
+        for _a in a:
+            print(f'{_a:4.0f} ', end='')
+        print('')
+    print('')
 
 if __name__ == '__main__':
-    from pprint import pprint
 
     gmsh.initialize()
     gmsh.model.add("fem")
@@ -52,8 +82,11 @@ if __name__ == '__main__':
 
     elementType = gmsh.model.mesh.getElementType("tetrahedron", 1)
     elements = set_element(elementType)
-    K = calc_K(elements)
-    print(K)
-    # pprint(elements)
+    edge_num, node_num = get_edge_node_num(elements)
+    K = calc_K(elements, edge_num, node_num)
+    C = calc_C(elements, edge_num, node_num)
+
+    pprint(K)
+    pprint(C)
     # gmsh.fltk.run()
 
