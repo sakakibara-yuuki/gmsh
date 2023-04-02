@@ -20,9 +20,6 @@ def set_edges(edge_tags, edge_nodes, nodes):
         edge = Edge(tag = edge_tag,
                     nodes = nodes_pair)
 
-        edge.set_N()
-        edge.set_rot()
-
         edges.append(edge)
 
     return edges
