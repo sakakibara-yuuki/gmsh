@@ -48,7 +48,7 @@ def calc_C(elements, edge_num, node_num):
             for node_i, node_j in itertools.product(edge.nodes, edge.nodes):
                 i = int(edge_num + node.tag - 1)
                 j = int(edge_num + node.tag - 1)
-                C[i][j] = np.dot(node_i.grad, node_j.grad)
+                C[i][j] += np.dot(node_i.grad, node_j.grad)
 
     return C
 
