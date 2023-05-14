@@ -18,7 +18,9 @@ dependencies = [
     "setuptools-scm",
     "numpy",
     "gmsh",
-    "pygmsh"
+    "matplotlib",
+    "black",
+    "isort"
 ]
 dynamic = ["version"]
 

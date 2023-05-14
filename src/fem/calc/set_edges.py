@@ -5,20 +5,17 @@
 # Copyright © 2023 sakakibara <sakakibara@skk.local>
 #
 # Distributed under terms of the MIT license.
-from fem.field import Edge
 import numpy as np
+
+from fem.field import Edge
 
 
 def set_edges(edge_tags, edge_nodes, nodes):
     edges = []
-    for edge_tag, nodes_pair_tag in zip(
-            edge_tags,
-            edge_nodes.reshape(-1, 2)):
-
+    for edge_tag, nodes_pair_tag in zip(edge_tags, edge_nodes.reshape(-1, 2)):
         nodes_pair = set_nodes_pair(nodes_pair_tag, nodes)
 
-        edge = Edge(tag = edge_tag,
-                    nodes = nodes_pair)
+        edge = Edge(tag=edge_tag, nodes=nodes_pair)
 
         edges.append(edge)
 

@@ -6,67 +6,86 @@
 #
 # Distributed under terms of the MIT license.
 import gmsh
-from fem.field import Element
-from fem.calc import set_nodes, set_edges
+import numpy as np
+
+from fem.calc import set_edges, set_nodes
+from fem.field import Edge, Element, Node
 
 
-def set_element(elementType):
+def set_element(elementType, element_order, interpolate_order):
 
     # all-element node
-    elementTags, elementNodeTags =\
-        gmsh.model.mesh.getElementsByType(elementType)
+    elementTags, elementNodeTags = gmsh.model.mesh.getElementsByType(elementType)
 
     # all-element edge
-    edgeNodes = gmsh.model.mesh.getElementEdgeNodes(elementType)
-    edgeTags, edgeOrientations = gmsh.model.mesh.getEdges(edgeNodes)
+    edgeNodes = gmsh.model.mesh.getElementEdgeNodes(elementType).reshape(
+        -1, element_order + 1
+    )
 
-    # all-element jacobian, determinants, coords, basisFunctions
-    localCoords, weights =\
-        gmsh.model.mesh.getIntegrationPoints(elementType, "Gauss1")
+    # this is Nessesary
+    gmsh.model.mesh.createEdges()
+    edgeTags, edgeOrientations = gmsh.model.mesh.getEdges(edgeNodes[:, :2].flatten())
 
-    jacobians, determinants, coords =\
-        gmsh.model.mesh.getJacobians(elementType, localCoords)
+    # gauss-Legendre localCoords
+    localCoords, weights = gmsh.model.mesh.getIntegrationPoints(
+        elementType, "Gauss" + str(interpolate_order)
+    )
 
-    numComponents, basisFunctions_L, numOrientations =\
-        gmsh.model.mesh.getBasisFunctions(elementType,
-                                          localCoords,
-                                          "Lagrange")
+    # affine transform
+    jacobians, determinants, coords = gmsh.model.mesh.getJacobians(
+        elementType, localCoords
+    )
 
-    numComponents, basisFunctions_grad, numOrientations =\
-        gmsh.model.mesh.getBasisFunctions(elementType,
-                                          localCoords,
-                                          "GradLagrange")
+    # edgeTag と　自作N, rotを対応させる.
+    # edgeTag　の並び順を確認する.
+    # print(jacobians.reshape(-1, 3, 3)[:2])
+    # print(weights)
+    # print(localCoords)
+    # print("elementTags")
+    # print(elementTags[:3])
+    # print(elementTags.shape)
+    # print("elementNodeTags")
+    # print(elementNodeTags[: 3 * 4])
+    # print(elementNodeTags.shape)
+    # print('edgeNodes')
+    # print(edgeNodes[:3*6, :])
+    # print(edgeNodes.shape)
+    # print('edgeTags')
+    # print(edgeTags[:3*6])
+    # print(edgeTags.shape)
 
-    e_num = len(elementTags)
+    node_list = []
+    for node_tag in elementNodeTags:
+        node = Node(node_tag)
+        node_list.append(node)
+    node_list = np.array(node_list, dtype=object)
 
-    elements_edges = []
-    for element_nodes, grads, edge_tags, edge_nodes in zip(
-            elementNodeTags.reshape(e_num, -1),
-            basisFunctions_grad.reshape(4, 3) @ jacobians.reshape(e_num, 3, 3),
-            edgeTags.reshape(e_num, -1),
-            edgeNodes.reshape(e_num, -1)):
+    edge_list = []
+    for edge_tag, edge_nodes in zip(edgeTags, edgeNodes[:, :2]):
+        edge_nodes = [Node(node_tag) for node_tag in edge_nodes]
+        edge = Edge(edge_tag, edge_nodes)
+        edge_list.append(edge)
+    edge_list = np.array(edge_list, dtype=object)
 
-            nodes = set_nodes(element_nodes, basisFunctions_L, grads)
-            edges = set_edges(edge_tags, edge_nodes, nodes)
-            elements_edges.append(edges)
+    element_list = []
+    for element_tag, edges, nodes, jacobian, determinant in zip(
+        elementTags,
+        edge_list.reshape(-1, 6),
+        node_list.reshape(-1, 4),
+        jacobians.reshape(-1, 3, 3),
+        determinants.reshape(-1, 1),
+    ):
 
-    elements = []
-    for elemnt_tag, edges, jacobian, determinant, coord in zip(
-                elementTags,
-                elements_edges,
-                jacobians.reshape(e_num, 3, 3),
-                determinants,
-                coords.reshape(e_num, -1)):
+        e = Element(element_tag, edges, nodes, jacobian, determinant)
 
-        e = Element(tag = elemnt_tag,
-                    type_num = elementType,
-                    edges = edges,
-                    jacobian = jacobian,
-                    determinant = determinant,
-                    coord = coord)
+        element_list.append(e)
 
-        elements.append(e)
+        # e.elementType = elementType
+        # e.localCoords = localCoords
+        # e.weights = weights
+        # create basis
+        # e.set_basis()
 
+    element_list = np.array(element_list, dtype=object)
 
-    return elements
-
+    return element_list

@@ -42,20 +42,21 @@ def calc_C(elements, edge_num, node_num, elementType):
     C = np.zeros((edge_num + node_num, edge_num + node_num))
 
     for e in elements:
-
         g = e.jacobian.T @ e.jacobian
-
-        row = np.array([[int(edge.tag) - 1] for edge in e.edges])
-        col = np.array([int(edge.tag) - 1 for edge in e.edges])
+        index = np.array([[int(edge_i.tag-1), int(edge_j.tag-1)]
+                          for edge_i, edge_j in itertools.product(e.edges, e.edges)])
+        row, col = index.T
         C[row, col] += e.determinant * np.dot(N @ g, N.T)
 
-        row = np.array([[int(edge.tag) - 1] for edge in e.edges])
-        col = np.array([int(node.tag) - 1 for node in e.nodes]) + edge_num
+        index = np.array([[int(edge.tag-1), int(node.tag-1)]
+                          for edge, node in itertools.product(e.edges, e.nodes)])
+        row, col = index.T
         C[row, col] += e.determinant * np.dot(N @ g, grad.T)
         C[col, row] = C[row, col]
 
-        row = np.array([[int(node.tag) - 1] for node in e.nodes]) + edge_num
-        col = np.array([int(node.tag) - 1 for node in e.nodes]) + edge_num
+        index = np.array([[int(node_i,tag-1), int(node_j.tag-1)]
+                          for node_i, node_j in itertools.product(e.nodes, e.nodes)])
+        row, col = index.T
         C[row, col] += e.determinant * np.dot(grad @ g, grad.T)
 
     return C
@@ -72,9 +73,23 @@ def calc_K(elements, edge_num, node_num, elementType):
 
     for e in elements:
         g = e.jacobian.T @ e.jacobian
-        row = np.array([[int(edge.tag) - 1] for edge in e.edges])
-        col = np.array([int(edge.tag) - 1 for edge in e.edges])
-        K[row, col] += rot @ np.linalg.inv(g) @ rot.T * e.determinant[0] ** 3
+        index = np.array([[int(edge_i.tag-1), int(edge_j.tag-1)]
+                          for edge_i, edge_j in
+                          itertools.product(e.edges, e.edges)])
+        row, col = index.T
+        k = rot @ np.linalg.inv(g) @ rot.T * e.determinant[0] ** 3
+        # K[row, col] += rot @ np.linalg.inv(g) @ rot.T * e.determinant[0] ** 3
+        index = np.array([[edge_i.tag, edge_j.tag] for edge_i, edge_j in itertools.product(e.edges, e.edges)])
+        index = index - 1
+        row, col = index.T
+        print(index.shape)
+        K[index.T] = np.array([[1, 2, 3, 4, 5, 6],
+                               [1, 2, 3, 4, 5, 6],
+                               [1, 2, 3, 4, 5, 6],
+                               [1, 2, 3, 4, 5, 6],
+                               [1, 2, 3, 4, 5, 6],
+                               [1, 2, 3, 4, 5, 6]])
+        print(K)
     return K
 
 def basis_grad(localCoords):
@@ -146,6 +161,7 @@ def _calc_K(elements, edge_num, node_num):
         for edge_i, edge_j in itertools.product(e.edges, e.edges):
             i = int(edge_i.tag - 1)
             j = int(edge_j.tag - 1)
+            # K[i][j] += determinant ** 3 * np.dot(edge_i @ g.I, edge_j)
             K[i][j] += np.dot(edge_i.rot, edge_j.rot) * e.determinant
     return K
 
