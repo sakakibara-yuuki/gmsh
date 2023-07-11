@@ -19,8 +19,12 @@ dependencies = [
     "numpy",
     "gmsh",
     "matplotlib",
+    "seaborn",
     "black",
-    "isort"
+    "isort",
+    "netgen",
+    "ngsolve",
+    "tkinter",
 ]
 dynamic = ["version"]
 

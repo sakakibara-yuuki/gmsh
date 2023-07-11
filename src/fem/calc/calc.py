@@ -5,155 +5,20 @@
 # Copyright © 2023 sakakibara <sakakibara@skk.local>
 #
 # Distributed under terms of the MIT license.
-import itertools
-import pprint
-
 import gmsh
+import math
 import matplotlib.pyplot as plt
-import numpy as np
+import seaborn as sn
 
 from fem.calc import set_element
-from fem.field import Edge, Element, Node
-from fem.field.model import make_model
-
-
-def get_edge_node_num(elements):
-    edge_tag_list = []
-    node_tag_list = []
-    for e in elements:
-        for edge in e.edges:
-            edge_tag_list.append(edge.tag)
-            for node in edge.nodes:
-                node_tag_list.append(node.tag)
-    edge_num = len(set(edge_tag_list))
-    node_num = len(set(node_tag_list))
-    return edge_num, node_num
-
-
-def calc_C(elements, edge_num, node_num, elementType):
-
-    localCoords, weights = gmsh.model.mesh.getIntegrationPoints(
-        elementType, "Gauss"
-    )
-
-    grad = basis_grad(localCoords)
-    N = basis_N(localCoords)
-
-    C = np.zeros((edge_num + node_num, edge_num + node_num))
-
-    for e in elements:
-
-        g = e.jacobian.T @ e.jacobian
-
-        row = np.array([[int(edge.tag) - 1] for edge in e.edges])
-        col = np.array([int(edge.tag) - 1 for edge in e.edges])
-        C[row, col] += e.determinant * np.dot(N @ g, N.T)
-
-        row = np.array([[int(edge.tag) - 1] for edge in e.edges])
-        col = np.array([int(node.tag) - 1 for node in e.nodes]) + edge_num
-        C[row, col] += e.determinant * np.dot(N @ g, grad.T)
-        C[col, row] = C[row, col]
-
-        row = np.array([[int(node.tag) - 1] for node in e.nodes]) + edge_num
-        col = np.array([int(node.tag) - 1 for node in e.nodes]) + edge_num
-        C[row, col] += e.determinant * np.dot(grad @ g, grad.T)
-
-    return C
-
-
-def calc_K(elements, edge_num, node_num, elementType):
-
-    localCoords, weights = gmsh.model.mesh.getIntegrationPoints(
-        elementType, "Gauss"
-    )
-    rot = basis_rot(localCoords)
-
-    K = np.zeros((edge_num + node_num, edge_num + node_num))
-
-    for e in elements:
-        g = e.jacobian.T @ e.jacobian
-        row = np.array([[int(edge.tag) - 1] for edge in e.edges])
-        col = np.array([int(edge.tag) - 1 for edge in e.edges])
-        K[row, col] += rot @ np.linalg.inv(g) @ rot.T * e.determinant[0] ** 3
-    return K
-
-def basis_grad(localCoords):
-    if not isinstance(localCoords, np.ndarray):
-        localCoords = np.array(localCoords)
-    if localCoords.shape[0] != 3:
-        raise Exception("dim is not matched")
-    u, v, w = localCoords
-    grad = np.array([[-1, -1, -1],
-                     [1, 0, 0],
-                     [0, 1, 0],
-                     [0, 0, 1]])
-    return grad
-
-def basis_N(localCoords):
-    if not isinstance(localCoords, np.ndarray):
-        localCoords = np.array(localCoords)
-    if localCoords.shape[0] != 3:
-        raise Exception("dim is not matched")
-    u, v, w = localCoords
-    N = np.array([[1-u-w, u, u],
-                  [v, 1-u-w, v],
-                  [w, w, 1-u-v],
-                  [-w, u, 0],
-                  [-w, 0, u],
-                  [0, -w, v]])
-    return N
-
-def basis_rot(localCoords):
-    if not isinstance(localCoords, np.ndarray):
-        localCoords = np.array(localCoords)
-    if localCoords.shape[0] != 3:
-        raise Exception("dim is not matched")
-    u, v, w = localCoords
-    rot = np.array([[0, -2, 2],
-                    [2, 0, -2],
-                    [-2, 2, 0],
-                    [0,  0, 2],
-                    [0, -2, 0],
-                    [2, 0, 0]])
-    return rot
-
-def _calc_C(elements, edge_num, node_num):
-    C = np.zeros((edge_num + node_num, edge_num + node_num))
-
-    for e in elements:
-        for edge_i, edge_j in itertools.product(e.edges, e.edges):
-            i = int(edge_i.tag - 1)
-            j = int(edge_j.tag - 1)
-            C[i][j] += np.dot(edge_i.N, edge_j.N) * e.determinant
-
-        for edge, node in itertools.product(e.edges, e.nodes):
-            i = int(edge.tag - 1)
-            j = int(edge_num + node.tag - 1)
-            C[i][j] += np.dot(edge.N, node.grad) * e.determinant
-            C[j][i] = C[i][j]
-
-        for node_i, node_j in itertools.product(e.nodes, e.nodes):
-            i = int(edge_num + node_i.tag - 1)
-            j = int(edge_num + node_j.tag - 1)
-            C[i][j] += np.dot(node_i.grad, node_j.grad) * e.determinant
-
-    return C
-
-
-def _calc_K(elements, edge_num, node_num):
-    K = np.zeros((edge_num + node_num, edge_num + node_num))
-    for e in elements:
-        for edge_i, edge_j in itertools.product(e.edges, e.edges):
-            i = int(edge_i.tag - 1)
-            j = int(edge_j.tag - 1)
-            K[i][j] += np.dot(edge_i.rot, edge_j.rot) * e.determinant
-    return K
+from fem.calc import get_edge_node_num
+from fem.calc import calc_K, calc_C
+import fem.model.geo
 
 
 def show_heat_matrix(X):
     fig, ax = plt.subplots()
-    heat = ax.pcolor(X, cmap=plt.cm.Blues)
-    ax.invert_yaxis()
+    sn.heatmap(data=X, annot=False)
     plt.show()
 
 
@@ -163,28 +28,178 @@ def p(X):
             print(f"{_x:2.1f} ", end="")
         print()
 
+# def air_box(s):
+#     z = 0.63
+#     lc2 = 0.3*1e-3
+
+#     # 'naca_boundary_layer_2d.py'.
+#     N = 10 # number of layers
+#     r = 2 # ra7io
+#     d = [1.7e-3] # thickness of first layer
+#     for i in range(1, N): d.append(d[-1] + d[0] * r**i)
+#     extbl = gmsh.model.geo.extrudeBoundaryLayer(gmsh.model.getEntities(2),
+#                                                 [1] * N, d, True)
+
+#     # get "top" surfaces of the boundary layer
+#     top = []
+#     for i in range(1, len(extbl)):
+#         if extbl[i][0] == 3:
+#             top.append(extbl[i-1])
+
+#     print('++'*31)
+#     gmsh.model.mesh.classifySurfaces(10 * math.pi / 180, True, False)
+#     gmsh.model.mesh.removeDuplicateNodes()
+#     gmsh.model.geo.synchronize()
+#     gmsh.model.mesh.removeDuplicateNodes()
+#     gmsh.model.mesh.classifySurfaces(10 * math.pi / 180, True, False)
+#     # bnd = gmsh.model.getBoundary(top)
+#     # cl2 = gmsh.model.geo.addCurveLoop([c[1] for c in bnd])
+#     p1 = gmsh.model.geo.addPoint(-1, -1, 0, lc2)
+#     p2 = gmsh.model.geo.addPoint(2, -1, 0, lc2)
+#     p3 = gmsh.model.geo.addPoint(2, 1, 0, lc2)
+#     p4 = gmsh.model.geo.addPoint(-1, 1, 0, lc2)
+#     l1 = gmsh.model.geo.addLine(p1, p2)
+#     l2 = gmsh.model.geo.addLine(p2, p3)
+#     l3 = gmsh.model.geo.addLine(p3, p4)
+#     l4 = gmsh.model.geo.addLine(p4, p1)
+#     cl3 = gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])
+#     # s2 = gmsh.model.geo.addPlaneSurface([cl3, cl2])
+#     print('**'*31)
+#     gmsh.fltk.run()
+#     # -------------------------- comment out til -----------------------
+#     # create 3D air box
+#     # -------------------------- comment out to -----------------------
+#     p11 = gmsh.model.geo.addPoint(-1, -1, 2*z, lc2)
+#     p12 = gmsh.model.geo.addPoint(2, -1, 2*z, lc2)
+#     p13 = gmsh.model.geo.addPoint(2, 1, 2*z, lc2)
+#     p14 = gmsh.model.geo.addPoint(-1, 1, 2*z, lc2)
+#     l11 = gmsh.model.geo.addLine(p11, p12)
+#     l12 = gmsh.model.geo.addLine(p12, p13)
+#     l13 = gmsh.model.geo.addLine(p13, p14)
+#     l14 = gmsh.model.geo.addLine(p14, p11)
+#     l_1_11 = gmsh.model.geo.addLine(p1, p11)
+#     l_2_12 = gmsh.model.geo.addLine(p2, p12)
+#     l_3_13 = gmsh.model.geo.addLine(p3, p13)
+#     l_4_14 = gmsh.model.geo.addLine(p4, p14)
+#     cl3 = gmsh.model.geo.addCurveLoop([l11, l12, l13, l14])
+#     s3 = gmsh.model.geo.addPlaneSurface([cl3])
+#     cl4 = gmsh.model.geo.addCurveLoop([l1, l_2_12, -l11, -l_1_11])
+#     s4 = gmsh.model.geo.addPlaneSurface([cl4])
+#     cl5 = gmsh.model.geo.addCurveLoop([l2, l_3_13, -l12, -l_2_12])
+#     s5 = gmsh.model.geo.addPlaneSurface([cl5])
+#     cl6 = gmsh.model.geo.addCurveLoop([l3, l_4_14, -l13, -l_3_13])
+#     s6 = gmsh.model.geo.addPlaneSurface([cl6])
+#     cl7 = gmsh.model.geo.addCurveLoop([l4, l_1_11, -l14, -l_4_14])
+#     s7 = gmsh.model.geo.addPlaneSurface([cl7])
+
+#     b = [s[1] for s in top]
+#     b.extend([s2, s3, s4, s5, s6, s7])
+#     sl = gmsh.model.geo.addSurfaceLoop(b)
+#     v = gmsh.model.geo.addVolume([sl])
+#     # -------------------------- comment out till -----------------------
+#     gmsh.model.geo.synchronize()
+
+# def create_air_box(s):
+#     mm = 1e-3
+#     lc2 = 0.05*mm
+
+#     bnd = gmsh.model.getBoundary(s)
+#     # bnd = gmsh.model.getBoundary([(2, 35)])
+#     cl2 = gmsh.model.geo.addCurveLoop([c[1] for c in bnd])
+#     p1 = gmsh.model.geo.addPoint(-1*mm, -10*mm, 0, lc2)
+#     p2 = gmsh.model.geo.addPoint(2*mm, -10*mm, 0, lc2)
+#     p3 = gmsh.model.geo.addPoint(2*mm, 10*mm, 0, lc2)
+#     p4 = gmsh.model.geo.addPoint(-1*mm, 10*mm, 0, lc2)
+#     l1 = gmsh.model.geo.addLine(p1, p2)
+#     l2 = gmsh.model.geo.addLine(p2, p3)
+#     l3 = gmsh.model.geo.addLine(p3, p4)
+#     l4 = gmsh.model.geo.addLine(p4, p1)
+#     cl3 = gmsh.model.geo.addCurveLoop([l1, l2, l3, l4])
+#     s2 = gmsh.model.geo.addPlaneSurface([cl3, cl2])
+#     gmsh.model.geo.synchronize()
+
+
+#     z = 4*mm
+#     p11 = gmsh.model.geo.addPoint(-1*mm, -10*mm, 2*z, lc2)
+#     p12 = gmsh.model.geo.addPoint(2*mm, -10*mm, 2*z, lc2)
+#     p13 = gmsh.model.geo.addPoint(2*mm, 10*mm, 2*z, lc2)
+#     p14 = gmsh.model.geo.addPoint(-1*mm, 10*mm, 2*z, lc2)
+#     l11 = gmsh.model.geo.addLine(p11, p12)
+#     l12 = gmsh.model.geo.addLine(p12, p13)
+#     l13 = gmsh.model.geo.addLine(p13, p14)
+#     l14 = gmsh.model.geo.addLine(p14, p11)
+#     l_1_11 = gmsh.model.geo.addLine(p1, p11)
+#     l_2_12 = gmsh.model.geo.addLine(p2, p12)
+#     l_3_13 = gmsh.model.geo.addLine(p3, p13)
+#     l_4_14 = gmsh.model.geo.addLine(p4, p14)
+#     cl3 = gmsh.model.geo.addCurveLoop([l11, l12, l13, l14])
+#     s3 = gmsh.model.geo.addPlaneSurface([cl3])
+#     cl4 = gmsh.model.geo.addCurveLoop([l1, l_2_12, -l11, -l_1_11])
+#     s4 = gmsh.model.geo.addPlaneSurface([cl4])
+#     cl5 = gmsh.model.geo.addCurveLoop([l2, l_3_13, -l12, -l_2_12])
+#     s5 = gmsh.model.geo.addPlaneSurface([cl5])
+#     cl6 = gmsh.model.geo.addCurveLoop([l3, l_4_14, -l13, -l_3_13])
+#     s6 = gmsh.model.geo.addPlaneSurface([cl6])
+#     cl7 = gmsh.model.geo.addCurveLoop([l4, l_1_11, -l14, -l_4_14])
+#     s7 = gmsh.model.geo.addPlaneSurface([cl7])
+
+#     b = [s[1] for s in top]
+#     b.extend([s2, s3, s4, s5, s6, s7])
+#     sl = gmsh.model.geo.addSurfaceLoop(b)
+#     v = gmsh.model.geo.addVolume([sl])
+
+#     gmsh.model.mesh.createGeometry()
+#     gmsh.model.geo.synchronize()
+
+
+def create_air_box():
+    mm = 1e-3
+    gmsh.model.add('air_box')
+    # gmsh.model.occ.add_box(0.000250, 0.005672, 0.005545, 3*mm, 20*mm, 4*mm)
+    gmsh.model.occ.add_box(2, 2, 1, mm, mm, mm)
+    gmsh.model.occ.synchronize()
+    gmsh.model.mesh.generate(3)
 
 def createGeometryAndMesh():
-    gmsh.clear()
-    # gmsh.merge('titled.stl')
+    # mm = 1e-3
 
+    # load STL surfaces
+    # gmsh.merge('titled.stl')
+    gmsh.merge('untitled3.stl')
+
+    # mesh
+    # gmsh.option.setNumber('Mesh.Algorithm', 6)
+    # gmsh.option.setNumber('Mesh.MeshSizeMin', 0.05*mm)
+    # gmsh.option.setNumber('Mesh.MeshSizeMax', 10*mm)
+
+    # merge nodes that are at the same position up to some
+    # gmsh.option.setNumber('Geometry.Tolerance', 1e-4)
+    # gmsh.model.mesh.removeDuplicateNodes()
+
+    # gmsh.model.mesh.classifySurfaces(40 * 3.14 / 180., True, True)
+    # gmsh.model.mesh.classifySurfaces(10 * math.pi / 180, True, False)
+
+    # gmsh.model.mesh.createGeometry()
+
+    # get all the surfaces in the model
     # s = gmsh.model.getEntities(2)
+    # create a surface loop and a volumen from these surfaces
     # l = gmsh.model.geo.addSurfaceLoop([e[1] for e in s])
     # gmsh.model.geo.addVolume([l])
-    # gmsh.model.geo.synchronize()
 
-    gmsh.model.add("sample model")
-    gmsh.model.occ.addBox(0, 0, 0, 1, 1, 1)
-    gmsh.model.occ.synchronize()
+    # synchronize the new volume with the model
+    gmsh.model.geo.synchronize()
+
+    create_air_box()
+    # create_air_box(s)
+    # air_box(s)
 
     gmsh.model.mesh.generate(3)
-    # gmsh.write('titled.msh')
-
 
 if __name__ == "__main__":
     gmsh.initialize()
     gmsh.model.add("fem")
-    # gmsh.option.setNumber("Mesh.MeshSizeMin", 12)
+    # gmsh.option.setNumber("Mesh.MeshSizeMin", 1)
 
     createGeometryAndMesh()
 
@@ -197,11 +212,11 @@ if __name__ == "__main__":
     elements = set_element(elementType, element_order, interpolate_order)
 
     edge_num, node_num = get_edge_node_num(elements)
-    K = calc_K(elements, edge_num, node_num, elementType)
-    C = calc_C(elements, edge_num, node_num, elementType)
+    # K = calc_K(elements, edge_num, node_num, elementType)
+    # C = calc_C(elements, edge_num, node_num, elementType)
 
     # show_heat_matrix(K)
     # show_heat_matrix(C)
 
-    # gmsh.fltk.run()
+    gmsh.fltk.run()
     gmsh.finalize()
