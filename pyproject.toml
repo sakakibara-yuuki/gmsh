@@ -18,7 +18,13 @@ dependencies = [
     "setuptools-scm",
     "numpy",
     "gmsh",
-    "pygmsh"
+    "matplotlib",
+    "seaborn",
+    "black",
+    "isort",
+    "netgen",
+    "ngsolve",
+    "tkinter",
 ]
 dynamic = ["version"]
 
